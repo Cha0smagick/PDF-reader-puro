@@ -1,3 +1,4 @@
+import os
 import time
 import logging
 import pdfplumber
@@ -7,8 +8,11 @@ from langchain_community.vectorstores import FAISS
 from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
 from sentence_transformers import SentenceTransformer, util
 import torch
-from langchain_community.llms import HuggingFacePipeline
+from langchain_huggingface import HuggingFacePipeline  # Actualizado para evitar el warning de deprecación
 from langchain.chains import RetrievalQA
+
+# Desactivar el warning de symlinks en Windows
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
