@@ -113,39 +113,43 @@ async def main(pdf_path):
     response_language = st.selectbox("¿Deseas la respuesta en español?", ["Sí", "No"])
     response_in_spanish = response_language == "Sí"
 
+    # Inicializar la variable de pregunta
+    question = ""
+
     while True:
         question = st.text_input("Ingresa tu pregunta (o 'shazam!' para salir): ", key="question_input")
         if question.lower() == "shazam!":
             logger.info("¡Programa finalizado!")
             break
 
-        # Traducir la pregunta al idioma del texto si es necesario
-        if detect_language(question) != text_language:
-            question_translated = await translate_text(question, 'es', text_language)
-        else:
-            question_translated = question
+        if question:  # Solo procesar si el usuario ha ingresado una pregunta
+            # Traducir la pregunta al idioma del texto si es necesario
+            if detect_language(question) != text_language:
+                question_translated = await translate_text(question, 'es', text_language)
+            else:
+                question_translated = question
 
-        start_time = time.time()
-        relevant_docs = vectorstore.similarity_search(question_translated, k=3)
-        context = " ".join(doc.page_content for doc in relevant_docs)
+            start_time = time.time()
+            relevant_docs = vectorstore.similarity_search(question_translated, k=3)
+            context = " ".join(doc.page_content for doc in relevant_docs)
 
-        qa = RetrievalQA.from_chain_type(llm=qa_pipeline, chain_type="stuff", retriever=vectorstore.as_retriever(), return_source_documents=True)
-        result = qa({"query": question_translated})
-        answer = result["result"]
-        latency = time.time() - start_time
+            qa = RetrievalQA.from_chain_type(llm=qa_pipeline, chain_type="stuff", retriever=vectorstore.as_retriever(), return_source_documents=True)
+            result = qa({"query": question_translated})
+            answer = result["result"]
+            latency = time.time() - start_time
 
-        # Traducir la respuesta al español si es necesario
-        if response_in_spanish:
-            answer = await translate_text(answer, text_language, 'es')
+            # Traducir la respuesta al español si es necesario
+            if response_in_spanish:
+                answer = await translate_text(answer, text_language, 'es')
 
-        similarity_score, consistency_score, answer_length = evaluate_answer(question_translated, answer, context)
+            similarity_score, consistency_score, answer_length = evaluate_answer(question_translated, answer, context)
 
-        st.write(f"Pregunta: {question}")
-        st.write(f"Respuesta generada: {answer} (Longitud: {answer_length} palabras)")
-        st.write(f"Similitud pregunta-respuesta: {similarity_score:.2f}")
-        st.write(f"Consistencia con el documento: {consistency_score:.2f}")
-        st.write(f"Tiempo de respuesta: {latency:.2f} segundos")
-        st.write("-" * 50)
+            st.write(f"Pregunta: {question}")
+            st.write(f"Respuesta generada: {answer} (Longitud: {answer_length} palabras)")
+            st.write(f"Similitud pregunta-respuesta: {similarity_score:.2f}")
+            st.write(f"Consistencia con el documento: {consistency_score:.2f}")
+            st.write(f"Tiempo de respuesta: {latency:.2f} segundos")
+            st.write("-" * 50)
 
 if __name__ == "__main__":
     st.title("Sistema de Preguntas y Respuestas sobre Documentos PDF")
