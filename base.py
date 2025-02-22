@@ -2,14 +2,17 @@ import os
 import time
 import logging
 import pdfplumber
+from langdetect import detect
+from googletrans import Translator
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
 from sentence_transformers import SentenceTransformer, util
 import torch
-from langchain_huggingface import HuggingFacePipeline  # Actualizado para evitar el warning de deprecación
+from langchain_huggingface import HuggingFacePipeline
 from langchain.chains import RetrievalQA
+import asyncio
 
 # Desactivar el warning de symlinks en Windows
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
@@ -17,6 +20,9 @@ os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Inicializar el traductor
+translator = Translator()
 
 def extract_text_from_pdf(pdf_path):
     """Extrae texto de un archivo PDF y maneja excepciones."""
@@ -27,6 +33,23 @@ def extract_text_from_pdf(pdf_path):
     except Exception as e:
         logger.error(f"Error al extraer texto del PDF: {e}")
         return ""
+
+def detect_language(text):
+    """Detecta el idioma del texto."""
+    try:
+        return detect(text)
+    except Exception as e:
+        logger.error(f"Error al detectar el idioma: {e}")
+        return "en"  # Default to English if detection fails
+
+async def translate_text(text, src_lang, dest_lang):
+    """Traduce texto de un idioma a otro."""
+    try:
+        translated = await translator.translate(text, src=src_lang, dest=dest_lang)
+        return translated.text
+    except Exception as e:
+        logger.error(f"Error al traducir el texto: {e}")
+        return text
 
 def load_qa_pipeline():
     """Carga el modelo de lenguaje y el pipeline de QA."""
@@ -67,11 +90,15 @@ def evaluate_answer(question, answer, context):
     
     return similarity_score, consistency_score, answer_length
 
-def main(pdf_path):
+async def main(pdf_path):
     """Función principal que orquesta la extracción de texto y la respuesta a preguntas."""
     start_time = time.time()
     text = extract_text_from_pdf(pdf_path)
     logger.info(f"Texto extraído en {time.time() - start_time:.2f} segundos")
+
+    # Detectar el idioma del texto
+    text_language = detect_language(text)
+    logger.info(f"Idioma detectado: {text_language}")
 
     start_time = time.time()
     vectorstore = create_index(text)
@@ -81,22 +108,36 @@ def main(pdf_path):
     qa_pipeline = load_qa_pipeline()
     logger.info(f"Modelo de QA cargado en {time.time() - start_time:.2f} segundos")
 
+    # Preguntar al usuario en qué idioma desea la respuesta (solo una vez)
+    response_language = input("¿Deseas la respuesta en español? (s/n): ").strip().lower()
+    response_in_spanish = response_language == 's'
+
     while True:
         question = input("Ingresa tu pregunta (o 'shazam!' para salir): ")
         if question.lower() == "shazam!":
             logger.info("¡Programa finalizado!")
             break
 
+        # Traducir la pregunta al idioma del texto si es necesario
+        if detect_language(question) != text_language:
+            question_translated = await translate_text(question, 'es', text_language)
+        else:
+            question_translated = question
+
         start_time = time.time()
-        relevant_docs = vectorstore.similarity_search(question, k=3)
+        relevant_docs = vectorstore.similarity_search(question_translated, k=3)
         context = " ".join(doc.page_content for doc in relevant_docs)
 
         qa = RetrievalQA.from_chain_type(llm=qa_pipeline, chain_type="stuff", retriever=vectorstore.as_retriever(), return_source_documents=True)
-        result = qa({"query": question})
+        result = qa({"query": question_translated})
         answer = result["result"]
         latency = time.time() - start_time
 
-        similarity_score, consistency_score, answer_length = evaluate_answer(question, answer, context)
+        # Traducir la respuesta al español si es necesario
+        if response_in_spanish:
+            answer = await translate_text(answer, text_language, 'es')
+
+        similarity_score, consistency_score, answer_length = evaluate_answer(question_translated, answer, context)
 
         logger.info(f"Pregunta: {question}")
         logger.info(f"Respuesta generada: {answer} (Longitud: {answer_length} palabras)")
@@ -107,4 +148,4 @@ def main(pdf_path):
 
 if __name__ == "__main__":
     pdf_path = "documento.pdf"  # Ruta al archivo PDF
-    main(pdf_path)
+    asyncio.run(main(pdf_path))
