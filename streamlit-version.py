@@ -114,7 +114,7 @@ async def main(pdf_path):
     response_in_spanish = response_language == "Sí"
 
     while True:
-        question = st.text_input("Ingresa tu pregunta (o 'shazam!' para salir): ")
+        question = st.text_input("Ingresa tu pregunta (o 'shazam!' para salir): ", key="question_input")
         if question.lower() == "shazam!":
             logger.info("¡Programa finalizado!")
             break
