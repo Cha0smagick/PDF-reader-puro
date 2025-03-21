@@ -1,4 +1,4 @@
-# Descripción del Proyecto
+# LaMini PDF reader
 
 Este script en Python está diseñado para extraer texto de un archivo PDF, detectar su idioma, y permitir al usuario hacer preguntas sobre el contenido del documento. El script utiliza modelos de lenguaje avanzados para generar respuestas precisas y evaluar la calidad de las respuestas en función de su similitud con la pregunta y su consistencia con el contenido del documento.
 
